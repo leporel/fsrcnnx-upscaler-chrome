@@ -92,6 +92,7 @@ h1 { font-size: 15px; font-weight: 700; letter-spacing: .02em; }
 .site-head svg { width: 15px; height: 15px; }
 .site-name { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site.unavailable .row { opacity: .4; pointer-events: none; }
+.site.site-off .needs-site { opacity: .4; pointer-events: none; }
 
 .toggles { padding: 2px 14px; }
 .toggles .row { padding: 10px 0; }

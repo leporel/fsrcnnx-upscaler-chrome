@@ -42,21 +42,24 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
         <span class="site-name" id="siteName">—</span>
       </div>
-      <label class="row" title="Если выключить, расширение на этом сайте ничего не делает, даже при включённом главном выключателе.">
-        <span><span class="row-title">Включено на этом сайте</span></span>
+      <label class="row" title="По умолчанию расширение выключено на всех сайтах. Включите его здесь, и сайт будет запомнен как включённый.">
+        <span>
+          <span class="row-title">Включено на этом сайте</span>
+          <span class="row-hint muted">По умолчанию выключено везде</span>
+        </span>
         <span class="switch"><input type="checkbox" id="siteEnabled"><span class="track"><span class="thumb"></span></span></span>
       </label>
-      <label class="row" title="Само подключается к видео, которое начало играть на этом сайте, без кнопки «Выбрать плеер». На странице с несколькими видео берёт самое крупное играющее.">
+      <label class="row needs-site" title="Само подключается к видео, которое начало играть на этом сайте, без кнопки «Выбрать плеер». На странице с несколькими видео берёт самое крупное играющее. Доступно, только когда расширение включено на сайте.">
         <span>
           <span class="row-title">Автозапуск</span>
           <span class="row-hint muted">Подключаться к играющему видео само</span>
         </span>
         <span class="switch"><input type="checkbox" id="siteAutoStart"><span class="track"><span class="thumb"></span></span></span>
       </label>
-      <label class="row" title="Пресет и все настройки ниже будут храниться отдельно для этого сайта. Если выключено, используются общие настройки.">
+      <label class="row" title="Пресет и все настройки ниже хранятся отдельно для этого сайта; стартуют с текущих общих настроек. Если выключено, сайт использует общие настройки, и их изменение сразу действует и здесь.">
         <span>
-          <span class="row-title">Свои настройки для сайта</span>
-          <span class="row-hint muted">Пресет и параметры только для этого сайта</span>
+          <span class="row-title">Индивидуальный пресет для сайта</span>
+          <span class="row-hint muted">Иначе используются общие настройки</span>
         </span>
         <span class="switch"><input type="checkbox" id="siteOwnSettings"><span class="track"><span class="thumb"></span></span></span>
       </label>

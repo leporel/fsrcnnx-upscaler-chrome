@@ -210,11 +210,13 @@
   /**
    * Resolves the effective configuration for a site.
    * Site profile: { enabled?: boolean, autoStart?: boolean, settings?: object }.
+   * Sites are opt-in: only an explicitly enabled site runs. A site without its
+   * own settings follows the shared ones live, so editing them affects it too.
    */
   FSRX.resolveConfig = (store, siteKey) => {
     const site = (siteKey && Object.hasOwn(store.sites, siteKey) && store.sites[siteKey]) || {};
     const ownSettings = Boolean(site.settings);
-    const siteEnabled = site.enabled !== false;
+    const siteEnabled = site.enabled === true;
     return {
       globalEnabled: store.globalEnabled,
       siteEnabled,

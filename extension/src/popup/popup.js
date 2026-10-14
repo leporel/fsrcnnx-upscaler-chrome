@@ -93,7 +93,7 @@
   /** Writes a site profile, dropping it entirely when it holds only defaults. */
   async function saveSiteProfile(profile) {
     const sites = { ...state.store.sites };
-    const isDefault = profile.enabled !== false && !profile.autoStart && !profile.settings;
+    const isDefault = !profile.enabled && !profile.autoStart && !profile.settings;
     if (isDefault) delete sites[state.siteKey];
     else sites[state.siteKey] = profile;
     await persist({ sites });
@@ -107,6 +107,16 @@
     } else {
       await persist({ settings });
     }
+  }
+
+  /**
+   * Content scripts only arm auto-start on page load, so a switch that just
+   * made it effective has to arm it in the open tab right away.
+   */
+  async function armAutoStartIfActive() {
+    const config = resolveConfig(state.store, state.siteKey);
+    if (!config.enabled || !config.autoStart) return;
+    await sendToWorker({ type: MESSAGES.AUTO_START, tabId: state.tabId });
   }
 
   function currentSettings() {
@@ -159,6 +169,7 @@
     ui.siteEnabled.checked = config.siteEnabled;
     ui.siteAutoStart.checked = config.autoStart;
     ui.siteOwnSettings.checked = config.ownSettings;
+    ui.siteCard.classList.toggle('site-off', !config.siteEnabled);
     ui.pick.disabled = !state.siteKey || !config.enabled;
     renderSettings(config);
   }
@@ -239,25 +250,27 @@
   };
 
   function bindEvents() {
-    ui.globalEnabled.addEventListener('change', guarded(() =>
-      persist({ globalEnabled: ui.globalEnabled.checked })));
+    ui.globalEnabled.addEventListener('change', guarded(async () => {
+      await persist({ globalEnabled: ui.globalEnabled.checked });
+      await armAutoStartIfActive();
+    }));
 
-    ui.siteEnabled.addEventListener('change', guarded(() =>
-      saveSiteProfile({ ...siteProfile(), enabled: ui.siteEnabled.checked })));
-
-    ui.siteAutoStart.addEventListener('change', guarded(async () => {
-      await saveSiteProfile({ ...siteProfile(), autoStart: ui.siteAutoStart.checked });
-      if (ui.siteAutoStart.checked) {
-        await sendToWorker({ type: MESSAGES.AUTO_START, tabId: state.tabId });
-      }
+    ui.siteEnabled.addEventListener('change', guarded(async () => {
+      await saveSiteProfile({ ...siteProfile(), enabled: ui.siteEnabled.checked });
+      await armAutoStartIfActive();
     }));
 
     ui.siteOwnSettings.addEventListener('change', guarded(() => {
       const profile = siteProfile();
-      // Start the site profile from whatever is in effect right now.
+      // Start the site preset from whatever is in effect right now.
       if (ui.siteOwnSettings.checked) profile.settings = { ...currentSettings() };
       else delete profile.settings;
       return saveSiteProfile(profile);
+    }));
+
+    ui.siteAutoStart.addEventListener('change', guarded(async () => {
+      await saveSiteProfile({ ...siteProfile(), autoStart: ui.siteAutoStart.checked });
+      await armAutoStartIfActive();
     }));
 
     ui.presets.addEventListener('click', guarded((e) => {
