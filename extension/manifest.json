@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "FSRCNNX — улучшение видео",
+  "version": "1.0.0",
+  "description": "Увеличение видео нейросетью FSRCNNX и удвоение кадров в реальном времени для любого HTML5-плеера. Работает на видеокарте через WebGPU.",
+  "minimum_chrome_version": "130",
+  "web_accessible_resources": [
+    {
+      "resources": ["vendor/framegen/rt.js", "vendor/framegen/weights/*"],
+      "matches": ["<all_urls>"],
+      "use_dynamic_url": true
+    }
+  ],
+  "permissions": ["scripting", "storage", "webNavigation"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "src/background/service-worker.js"
+  },
+  "action": {
+    "default_title": "FSRCNNX — улучшение видео",
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

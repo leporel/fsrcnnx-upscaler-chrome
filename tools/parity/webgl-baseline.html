@@ -1,0 +1,61 @@
+<!doctype html>
+<!--
+  WebGL2 baseline renders for the WebGPU parity check, using the legacy
+  WebGL2 renderer kept in ./legacy. Renders the synthetic test frame through
+  every PARITY_CASES entry and emits PNGs plus a text log. Run it with
+  run_parity.py (it must be served over http).
+-->
+<html><body><pre id="log"></pre><div id="imgs"></div>
+<script>
+globalThis.chrome = {};
+// Synchronous linking: headless virtual time does not wait for parallel compile polling.
+const origGetExtension = WebGL2RenderingContext.prototype.getExtension;
+WebGL2RenderingContext.prototype.getExtension = function (name) {
+  return name === 'KHR_parallel_shader_compile' ? null : origGetExtension.call(this, name);
+};
+</script>
+<script src="shaders.gen.js"></script>
+<script src="harness.js"></script>
+<script src="../../extension/src/shared/settings.js"></script>
+<script src="legacy/mpv-hook.js"></script>
+<script src="legacy/gl.js"></script>
+<script src="legacy/shaders.js"></script>
+<script src="legacy/renderer.js"></script>
+<script src="test-frame.js"></script>
+<script>
+(async () => {
+  try {
+    const src = await makeTestFrame();
+    const canvas = document.createElement('canvas');
+    canvas.width = OUT_W; canvas.height = OUT_H;
+    const r = new FSRX.Renderer(canvas);
+    await r.init();
+    const layout = { outW: OUT_W, outH: OUT_H, frameW: OUT_W, frameH: OUT_H, crop: { x: 0, y: 0, w: 1, h: 1 } };
+    const models = { none: null };
+    for (const [id, m] of Object.entries(FSRX.MODELS)) {
+      models[id] = await r.loadModel(id, FSRX.mpvHook.parseHookShader(SHADERS[m.file]));
+    }
+    for (const caseDef of PARITY_CASES) {
+      const res = r.process(src, { w: OUT_W, h: OUT_H }, models[caseDef.model], caseDef.sharpness);
+      // preserveDrawingBuffer is false: capture in the same task as the draw.
+      r.composite(layout, { antiring: caseDef.antiring, scaler: caseDef.scaler, split: caseDef.split });
+      harness.shot(canvas, caseDef.label);
+      harness.log(`${caseDef.label}: applied=${res.modelApplied} luma=${res.lumaW}x${res.lumaH} err=${r.gl.getError()}`);
+    }
+    harness.log(`GPU time per frame (ms, ${TIMING_FRAMES} frames, finish() wall time):`);
+    for (const caseDef of PARITY_CASES) {
+      const gl = r.gl;
+      const t0 = performance.now();
+      for (let i = 0; i < TIMING_FRAMES; i++) {
+        r.process(src, { w: OUT_W, h: OUT_H }, models[caseDef.model], caseDef.sharpness);
+        r.composite(layout, { antiring: caseDef.antiring, scaler: caseDef.scaler, split: caseDef.split });
+      }
+      gl.finish();
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+      harness.log(`  ${caseDef.label}: ${((performance.now() - t0) / TIMING_FRAMES).toFixed(3)}`);
+    }
+    harness.log('DONE');
+  } catch (e) { harness.log('ERROR ' + e.message + '\n' + e.stack); }
+  await harness.finish();
+})();
+</script></body></html>

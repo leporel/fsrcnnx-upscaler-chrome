@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>FSRCNNX — апскейлер видео</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="popup" id="app">
+    <header class="header">
+      <div class="brand">
+        <img class="logo" src="/icons/icon-48.png" alt="" width="32" height="32">
+        <div>
+          <h1>FSRCNNX</h1>
+          <p class="muted">Улучшение видео на видеокарте</p>
+        </div>
+      </div>
+      <label class="switch switch-lg" title="Главный выключатель: включает или выключает расширение на всех сайтах сразу.">
+        <input type="checkbox" id="globalEnabled" aria-label="Включить везде">
+        <span class="track"><span class="thumb"></span></span>
+      </label>
+    </header>
+
+    <section class="card status" id="statusCard" data-state="idle">
+      <span class="status-dot" aria-hidden="true"></span>
+      <div class="status-text">
+        <div class="status-title" id="statusTitle">Видео не выбрано</div>
+        <div class="status-detail muted" id="statusDetail">Выберите плеер на странице</div>
+      </div>
+      <button class="icon-btn" id="detach" type="button" title="Отключиться от этого видео (до перезагрузки страницы автозапуск его не тронет)" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </section>
+
+    <button class="primary" id="pick" type="button" title="Наведите курсор на видео на странице и кликните по нему. Esc — отмена.">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+      <span>Выбрать плеер</span>
+    </button>
+
+    <section class="card site" id="siteCard">
+      <div class="site-head">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+        <span class="site-name" id="siteName">—</span>
+      </div>
+      <label class="row" title="Если выключить, расширение на этом сайте ничего не делает, даже при включённом главном выключателе.">
+        <span><span class="row-title">Включено на этом сайте</span></span>
+        <span class="switch"><input type="checkbox" id="siteEnabled"><span class="track"><span class="thumb"></span></span></span>
+      </label>
+      <label class="row" title="Само подключается к видео, которое начало играть на этом сайте, без кнопки «Выбрать плеер». На странице с несколькими видео берёт самое крупное играющее.">
+        <span>
+          <span class="row-title">Автозапуск</span>
+          <span class="row-hint muted">Подключаться к играющему видео само</span>
+        </span>
+        <span class="switch"><input type="checkbox" id="siteAutoStart"><span class="track"><span class="thumb"></span></span></span>
+      </label>
+      <label class="row" title="Пресет и все настройки ниже будут храниться отдельно для этого сайта. Если выключено, используются общие настройки.">
+        <span>
+          <span class="row-title">Свои настройки для сайта</span>
+          <span class="row-hint muted">Пресет и параметры только для этого сайта</span>
+        </span>
+        <span class="switch"><input type="checkbox" id="siteOwnSettings"><span class="track"><span class="thumb"></span></span></span>
+      </label>
+    </section>
+
+    <section class="block needs-upscale">
+      <div class="block-head">
+        <h2 title="Готовые наборы: модель нейросети, резкость, подавление ореолов и итоговое масштабирование.">Пресет</h2>
+        <span class="scope" id="scope" title="Где сохраняются настройки: общие или только для этого сайта">Общие</span>
+      </div>
+      <div class="segmented" id="presets" role="radiogroup" aria-label="Пресет"></div>
+      <p class="hint muted" id="presetHint"></p>
+    </section>
+
+    <section class="card toggles">
+      <label class="row" title="Делит картинку пополам: слева исходное видео как есть, справа результат всей обработки. Разделитель можно двигать мышью или стрелками.">
+        <span>
+          <span class="row-title">Сравнение A/B</span>
+          <span class="row-hint muted">Слева оригинал, справа результат</span>
+        </span>
+        <span class="switch"><input type="checkbox" id="compare"><span class="track"><span class="thumb"></span></span></span>
+      </label>
+      <label class="row" title="Панель всегда видна поверх видео и раз в секунду обновляет показатели, каждый на своей строке: реальная частота вывода, время видеокарты на кадр, нагрузка удвоения кадров (оранжевым, если выше комфортной), задержка картинки, пропущенные кадры (наши и самого плеера), видеопамять. Если выключено, панель появляется на 2 секунды при запуске и смене настроек, без показателей.">
+        <span>
+          <span class="row-title">Показывать панель (HUD)</span>
+          <span class="row-hint muted">Информация всегда поверх видео</span>
+        </span>
+        <span class="switch"><input type="checkbox" id="showHud"><span class="track"><span class="thumb"></span></span></span>
+      </label>
+    </section>
+
+    <section class="card toggles">
+      <label class="row" title="Нейросеть FSRCNNX увеличивает видео в 2 раза и дорисовывает детали, затем картинка подгоняется под размер плеера. Видео 1440p и больше (по короткой стороне) не увеличивается: деталей в нём и так достаточно. Если выключить, видео просто масштабируется, а удвоение кадров (если включено) работает отдельно.">
+        <span>
+          <span class="row-title">Увеличение нейросетью</span>
+          <span class="row-hint muted">Чётче детали (FSRCNNX)</span>
+        </span>
+        <span class="switch"><input type="checkbox" id="upscale"><span class="track"><span class="thumb"></span></span></span>
+      </label>
+      <label class="row" title="Нейросеть дорисовывает промежуточный кадр между каждыми двумя кадрами видео: 24 кадра/с превращаются в 48. Лучше всего смотрится на мониторе 120/144 Гц. Картинка отстаёт от звука примерно на полкадра (около 20 мс). На резкой смене сцены промежуточный кадр не рисуется. Если видеокарта не успевает, режим отключится сам.">
+        <span>
+          <span class="row-title">Удвоение кадров ×2</span>
+          <span class="row-hint muted">Увеличение плавности движения</span>
+        </span>
+        <span class="switch"><input type="checkbox" id="frameGen"><span class="track"><span class="thumb"></span></span></span>
+      </label>
+      <label class="row" id="skipDuplicatesRow" title="Находит кадры, которые повторяют предыдущий (так часто рисуют аниме: каждый рисунок держится 2 кадра). Такой кадр не прогоняется через нейросеть заново, а между двумя одинаковыми кадрами не дорисовывается промежуточный: картинка просто держится. Экономит видеокарту и убирает лишнюю работу. Если выключить, каждый кадр идёт через всю обработку, даже если он не изменился.">
+        <span>
+          <span class="row-title">Пропускать повторы кадров</span>
+          <span class="row-hint muted">Не обрабатывать заново одинаковые кадры</span>
+        </span>
+        <span class="switch"><input type="checkbox" id="skipDuplicates"><span class="track"><span class="thumb"></span></span></span>
+      </label>
+    </section>
+
+    <details class="advanced">
+      <summary title="Ручная настройка. Любое изменение здесь переключает пресет на «Свой».">
+        <span>Дополнительно</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10l4 4 4-4"/></svg>
+      </summary>
+      <div class="field needs-upscale" title="Нейросеть, которая увеличивает видео в 2 раза и дорисовывает детали. 8 — быстрая, 16 — качественнее, но в 2–3 раза тяжелее. «16 Аниме» обучена на рисованной графике.">
+        <label for="model">Модель</label>
+        <select id="model"></select>
+      </div>
+      <div class="field needs-upscale" title="Дополнительное повышение резкости после нейросети (AMD CAS). 0 — выключено. Большие значения могут подчеркнуть шум и зерно.">
+        <label for="sharpness">Резкость <output id="sharpnessValue" for="sharpness">0.00</output></label>
+        <input type="range" id="sharpness" min="0" max="1" step="0.05">
+      </div>
+      <div class="field needs-upscale" title="Убирает светлые и тёмные ореолы вокруг резких краёв, которые дают нейросеть и масштабирование. 0 — выключено, 1 — максимум.">
+        <label for="antiring">Подавление ореолов <output id="antiringValue" for="antiring">0.00</output></label>
+        <input type="range" id="antiring" min="0" max="1" step="0.05">
+      </div>
+      <div class="field" title="Как увеличенная картинка подгоняется под точный размер плеера. Catmull-Rom чётче, билинейный чуть мягче и быстрее.">
+        <label for="scaler">Итоговое масштабирование</label>
+        <select id="scaler"></select>
+      </div>
+    </details>
+
+    <p class="error" id="error" role="alert" hidden></p>
+
+    <footer class="footer muted">
+      <span id="gpu" title="Видеокарта, на которой идёт обработка">Видеокарта: —</span>
+      <span id="version"></span>
+    </footer>
+  </main>
+  <script src="/src/shared/settings.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

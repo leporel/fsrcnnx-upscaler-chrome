@@ -1,0 +1,19 @@
+Framegen runtime + v7-small weights, vendored unchanged.
+
+Source:   https://github.com/MONZikWasTaken/Framegen
+Release:  v1.5.3 (latest release and main HEAD as of 2026-10-14)
+Commit:   4cc26b80ea096be0ab3efd940ae91243068d60ed
+
+File                  Upstream path                      SHA-256
+rt.js                 web/rt/rt.js                       3e70f2ebc2fb0378bc2d014737614d842dc6abdd368cd7ffbc620216aea8ebb6
+weights/rt_v7s.bin    extension/assets/rt_v7s.bin        76428e1769f742a2aaad79996f2eb57cc29388a6dc21c242386ca9110c0bb397
+weights/rt_v7s.json   extension/assets/rt_v7s.json       6fa80133638949109d11fec3efb0421fbbc556f9bcff2fe2239b410154d8e7e3
+LICENSE               LICENSE                            b40a2868b660d4e5f827d0d4255ad9093bd57b446dc3d03911d95866a404f415
+WEIGHTS_LICENSE.md    WEIGHTS_LICENSE.md                 8a639ace26979f31cccc684ae2d1db9efd99bf2e72361e7f933f19de34a4d7bd
+
+rt.js is identical to extension/rt/rt.js at the same commit (119 426 bytes).
+The weights were last changed in commit 559b147e4d7557d7ca02fd2903243610d9642f6e.
+Not taken from npm: framegen@latest there is 1.4.0 (older).
+
+Licenses: code is MIT (LICENSE). The weights are NON-COMMERCIAL, personal and
+research use only, redistributed unchanged with WEIGHTS_LICENSE.md.

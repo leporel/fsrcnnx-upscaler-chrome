@@ -1,0 +1,5 @@
+# Parity harness output and generated files
+tools/parity/out/
+tools/parity/_probe/
+tools/parity/shaders.gen.js
+__pycache__/

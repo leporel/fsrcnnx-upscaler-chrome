@@ -1,0 +1,65 @@
+<!doctype html>
+<!--
+  WebGPU renders of the same synthetic frame and PARITY_CASES as
+  webgl-baseline.html, using the extension's current renderer. Must be served
+  over http (see run_parity.py); compare the outputs with compare.py.
+-->
+<html><body><pre id="log"></pre><div id="imgs"></div>
+<script>globalThis.chrome = {};</script>
+<script src="shaders.gen.js"></script>
+<script src="harness.js"></script>
+<script src="../../extension/src/shared/settings.js"></script>
+<script src="../../extension/src/content/mpv-hook.js"></script>
+<script src="../../extension/src/content/gpu.js"></script>
+<script src="../../extension/src/content/wgsl-passes.js"></script>
+<script src="../../extension/src/content/wgsl-hook.js"></script>
+<script src="../../extension/src/content/renderer.js"></script>
+<script src="test-frame.js"></script>
+<script>
+(async () => {
+  try {
+    const src = await makeTestFrame();
+    const canvas = document.createElement('canvas');
+    canvas.width = OUT_W; canvas.height = OUT_H;
+    let fatal = null;
+    const r = new FSRX.Renderer(canvas, { onFatal: (err) => { fatal = err; harness.log('FATAL ' + err.message); } });
+    await r.init();
+    harness.log(`gpu=${r.gpuName} f16=${r.gpu.hasF16} timestamps=${r.gpu.hasTimestamps} format=${r.gpu.format}`);
+    const layout = { outW: OUT_W, outH: OUT_H, frameW: OUT_W, frameH: OUT_H, crop: { x: 0, y: 0, w: 1, h: 1 } };
+    const frame = { srcW: SRC_W, srcH: SRC_H };
+    const models = { none: null };
+    for (const [id, m] of Object.entries(FSRX.MODELS)) {
+      const t0 = performance.now();
+      models[id] = await r.loadModel(id, FSRX.mpvHook.parseHookShader(SHADERS[m.file]));
+      harness.log(`compiled ${id} in ${Math.round(performance.now() - t0)} ms`);
+    }
+    const render = (caseDef) => {
+      const tex = r.uploadVideo(src);
+      const res = r.process(tex, { w: OUT_W, h: OUT_H }, models[caseDef.model], caseDef.sharpness, frame);
+      r.composite(layout, { antiring: caseDef.antiring, scaler: caseDef.scaler, split: caseDef.split });
+      return res;
+    };
+    for (const caseDef of PARITY_CASES) {
+      const res = render(caseDef);
+      // The canvas texture is presented after this task: capture right away.
+      harness.shot(canvas, caseDef.label);
+      harness.log(`${caseDef.label}: applied=${res.modelApplied} luma=${res.lumaW}x${res.lumaH}`);
+    }
+    await r.device.queue.onSubmittedWorkDone();
+    harness.log(`GPU time per frame (ms, ${TIMING_FRAMES} frames, wall time | timestamp-query smoothed):`);
+    for (const caseDef of PARITY_CASES) {
+      r.timer.time.reset();
+      const t0 = performance.now();
+      for (let i = 0; i < TIMING_FRAMES; i++) render(caseDef);
+      await r.device.queue.onSubmittedWorkDone();
+      const wall = (performance.now() - t0) / TIMING_FRAMES;
+      // Let the last timestamp readbacks land.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const ts = r.timer.usesTimestamps ? r.gpuMs.toFixed(3) : 'n/a';
+      harness.log(`  ${caseDef.label}: ${wall.toFixed(3)} | ${ts}`);
+    }
+    harness.log(fatal ? 'FAILED' : 'DONE');
+  } catch (e) { harness.log('ERROR ' + e.message + '\n' + e.stack); }
+  await harness.finish();
+})();
+</script></body></html>

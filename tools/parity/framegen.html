@@ -1,0 +1,133 @@
+<!doctype html>
+<!--
+  Frame generation smoke test: builds the vendored Framegen runtime on the
+  extension's shared device, interpolates between the test frame and a shifted
+  copy, upscales the mid through the renderer, and checks the duplicate/cut
+  classifier. Run with: python tools/parity/run_parity.py --page framegen
+-->
+<html><body><pre id="log"></pre><div id="imgs"></div>
+<script>
+// Minimal extension API stand-ins for running content scripts in a page.
+const memoryStore = {};
+globalThis.chrome = {
+  runtime: { getURL: (path) => new URL(`../../extension/${path}`, location.href).href },
+  storage: {
+    local: {
+      get: async (key) => (key in memoryStore ? { [key]: memoryStore[key] } : {}),
+      set: async (items) => { Object.assign(memoryStore, items); },
+      remove: async (key) => { delete memoryStore[key]; },
+    },
+  },
+};
+</script>
+<script src="shaders.gen.js"></script>
+<script src="harness.js"></script>
+<script src="../../extension/src/shared/settings.js"></script>
+<script src="../../extension/src/content/mpv-hook.js"></script>
+<script src="../../extension/src/content/gpu.js"></script>
+<script src="../../extension/src/content/wgsl-passes.js"></script>
+<script src="../../extension/src/content/wgsl-hook.js"></script>
+<script src="../../extension/src/content/renderer.js"></script>
+<script src="../../extension/src/content/frame-diff.js"></script>
+<script src="../../extension/src/content/framegen.js"></script>
+<script src="../../extension/src/content/interpolator.js"></script>
+<script src="test-frame.js"></script>
+<script>
+// ?scale=N renders the frame N times larger, ?shift=PX sets the motion between the pair.
+const params = new URLSearchParams(location.search);
+const SCALE = Number(params.get('scale') || 1);
+const SHIFT = Number(params.get('shift') || 8);
+const FG_W = SRC_W * SCALE;
+const FG_H = SRC_H * SCALE;
+
+/**
+ * Canvas "video": the test frame at a horizontal offset, or a flat colour.
+ * mouth: adds a short dark stroke (a few pixels, like a mouth flap in anime);
+ * noise: adds deterministic +-3/255 jitter, like codec noise on a re-encoded duplicate.
+ */
+function frameVariant(base, dx, { fill = null, mouth = false, noise = false } = {}) {
+  const c = document.createElement('canvas');
+  c.width = FG_W; c.height = FG_H;
+  const g = c.getContext('2d');
+  if (fill) { g.fillStyle = fill; g.fillRect(0, 0, FG_W, FG_H); } else { g.drawImage(base, dx, 0, FG_W, FG_H); }
+  if (mouth) { g.fillStyle = '#301010'; g.fillRect(Math.round(FG_W * 0.3), Math.round(FG_H * 0.8), 6, 2); }
+  if (noise) {
+    const img = g.getImageData(0, 0, FG_W, FG_H);
+    let seed = 12345;
+    for (let i = 0; i < img.data.length; i += 4) {
+      for (let ch = 0; ch < 3; ch++) {
+        seed = (seed * 1103515245 + 12345) >>> 0;
+        img.data[i + ch] = Math.max(0, Math.min(255, img.data[i + ch] + (seed % 7) - 3));
+      }
+    }
+    g.putImageData(img, 0, 0);
+  }
+  c.videoWidth = FG_W; c.videoHeight = FG_H;
+  return c;
+}
+
+(async () => {
+  try {
+    const base = await makeTestFrame();
+    const canvas = document.createElement('canvas');
+    canvas.width = OUT_W; canvas.height = OUT_H;
+    const r = new FSRX.Renderer(canvas, { onFatal: (err) => harness.log('FATAL ' + err.message) });
+    await r.init();
+    harness.log(`gpu=${r.gpuName} f16=${r.gpu.hasF16}`);
+
+    const classes = [];
+    const onClass = (target, seq, cls) => classes.push(`${target.name}=${cls}`);
+    const interp = new FSRX.Interpolator(r.gpu, { isIdle: () => false, onMeasure: () => {} });
+    interp.setSourceSize(FG_W, FG_H);
+    const t0 = performance.now();
+    while (!interp.ready && !interp.error) await new Promise((res) => setTimeout(res, 50));
+    if (interp.error) throw interp.error;
+    harness.log(`runtime ready in ${Math.round(performance.now() - t0)} ms, model ${interp.sizeKey}`);
+
+    // Real frames arrive ~40 ms apart; give each statistic time to come back
+    // (back-to-back pushes would exhaust the readback slots).
+    const push = async (canvas, name, seq) => {
+      const slot = interp.pushFrame(canvas, { name }, seq, onClass);
+      await r.device.queue.onSubmittedWorkDone();
+      await new Promise((res) => setTimeout(res, 40));
+      return slot;
+    };
+    const fA = await push(frameVariant(base, 0), 'first', 1);
+    const fB = await push(frameVariant(base, SHIFT), 'shifted(motion)', 2);
+    const fDup = await push(frameVariant(base, SHIFT), 'same(dup)', 3);
+    const fMouth = await push(frameVariant(base, SHIFT, { mouth: true }), 'mouth(motion)', 4);
+    const fNoisy = await push(frameVariant(base, SHIFT, { mouth: true, noise: true }), 'noisy(dup)', 5);
+    const fCut = await push(frameVariant(base, 0, { fill: '#d0d0d0' }), 'flat(cut)', 6);
+
+    const layout = { outW: OUT_W, outH: OUT_H, frameW: OUT_W, frameH: OUT_H, crop: { x: 0, y: 0, w: 1, h: 1 } };
+    const model = await r.loadModel('fsrcnnx-8', FSRX.mpvHook.parseHookShader(SHADERS['FSRCNNX_x2_8-0-4-1.glsl']));
+    const options = { antiring: 0.5, scaler: 'catmull-rom', split: -1 };
+    const frame = { srcW: FG_W, srcH: FG_H };
+    for (const [label, tex, real] of [
+      ['real-a', fA.texture, true],
+      ['mid-0.25', interp.mid(fA, fB, 0.25), false],
+      ['mid-0.5', interp.mid(fA, fB, 0.5), false],
+      ['mid-0.75', interp.mid(fA, fB, 0.75), false],
+      ['real-b', fB.texture, true],
+    ]) {
+      r.process(tex, { w: OUT_W, h: OUT_H }, model, 0, { ...frame, real });
+      r.composite(layout, options);
+      harness.shot(canvas, label);
+    }
+    // A/B compare during a mid: the left half must show the last real frame (b).
+    interp.mid(fA, fB, 0.25);
+    r.process(interp.midTex, { w: OUT_W, h: OUT_H }, model, 0, { ...frame, real: false });
+    r.composite(layout, { ...options, split: 0.5 });
+    harness.shot(canvas, 'ab-during-mid');
+
+    await r.device.queue.onSubmittedWorkDone();
+    await new Promise((res) => setTimeout(res, 200));
+    harness.log(`classes: ${classes.join(' ')}`);
+    harness.log(`textures=${interp.textureBytes} bytes`);
+    [fA, fB, fDup, fMouth, fNoisy, fCut].forEach((s) => interp.release(s));
+    interp.destroy();
+    harness.log('DONE');
+  } catch (e) { harness.log('ERROR ' + e.message + '\n' + e.stack); }
+  await harness.finish();
+})();
+</script></body></html>
