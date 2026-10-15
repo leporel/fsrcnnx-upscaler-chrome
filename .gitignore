@@ -9,3 +9,6 @@ __pycache__/
 
 # Chrome Web Store packages (tools/package.py)
 dist/
+
+# Local screenshots
+docs/popup_2.png
