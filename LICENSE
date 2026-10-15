@@ -25,8 +25,12 @@ SOFTWARE.
 This license covers the extension's own code only. Third-party components
 keep their own licenses:
 
-- extension/shaders/*.glsl (FSRCNNX by igv): LGPL-3.0, see
-  extension/shaders/COPYING.LESSER and extension/shaders/COPYING.
+- extension/shaders/FSRCNNX_x2_8-0-4-1.glsl, FSRCNNX_x2_16-0-4-1.glsl
+  (FSRCNNX by igv): LGPL-3.0, see extension/shaders/COPYING.LESSER and
+  extension/shaders/COPYING.
+- extension/shaders/FSRCNNX_x2_16-0-4-1_anime_enhance.glsl (release 1.1_distort
+  of github.com/HelpSeeker/FSRCNN-TensorFlow, unchanged): MIT, see
+  extension/shaders/LICENSE.anime_enhance.
 - extension/vendor/framegen/rt.js (Framegen): MIT, see
   extension/vendor/framegen/LICENSE.
 - extension/vendor/framegen/weights/* (Framegen model weights): non-commercial

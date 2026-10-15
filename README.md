@@ -70,8 +70,11 @@
 ## Лицензии
 
 - Код расширения — MIT (`LICENSE`).
-- Шейдеры FSRCNNX — LGPL-3.0 (`extension/shaders/COPYING.LESSER`,
+- Шейдеры FSRCNNX от igv — LGPL-3.0 (`extension/shaders/COPYING.LESSER`,
   `extension/shaders/COPYING`).
+- Шейдер `FSRCNNX_x2_16-0-4-1_anime_enhance.glsl` — из релиза `1.1_distort`
+  [HelpSeeker/FSRCNN-TensorFlow](https://github.com/HelpSeeker/FSRCNN-TensorFlow),
+  MIT (`extension/shaders/LICENSE.anime_enhance`).
 - Код Framegen — MIT (`extension/vendor/framegen/LICENSE`).
 - **Веса нейросети Framegen — только для личного некоммерческого
   использования** (`extension/vendor/framegen/WEIGHTS_LICENSE.md`).
