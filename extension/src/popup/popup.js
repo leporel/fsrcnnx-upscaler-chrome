@@ -41,6 +41,10 @@
     error: $('error'),
     gpu: $('gpu'),
     version: $('version'),
+    needsSite: document.querySelectorAll('.needs-site'),
+    needsUpscale: document.querySelectorAll('.needs-upscale'),
+    // Same selection as the .global-off CSS rule.
+    globalParked: document.querySelectorAll('#app > :not(.header):not(.footer)'),
   };
 
   const state = {
@@ -116,7 +120,13 @@
   async function armAutoStartIfActive() {
     const config = resolveConfig(state.store, state.siteKey);
     if (!config.enabled || !config.autoStart) return;
-    await sendToWorker({ type: MESSAGES.AUTO_START, tabId: state.tabId });
+    try {
+      await sendToWorker({ type: MESSAGES.AUTO_START, tabId: state.tabId });
+    } catch (err) {
+      // The switch itself is already saved; only this tab refused injection
+      // (e.g. pages Chrome closes to extensions), so say exactly that.
+      throw new Error(`Настройка сохранена, но на этой странице автозапуск недоступен: ${errorMessage(err)}`);
+    }
   }
 
   function currentSettings() {
@@ -139,6 +149,7 @@
     ui.showHud.checked = settings.showHud;
     ui.upscale.checked = settings.upscale;
     ui.app.classList.toggle('upscale-off', !settings.upscale);
+    setParked(ui.needsUpscale, !settings.upscale);
     ui.frameGen.checked = settings.frameGen;
     ui.skipDuplicates.checked = settings.skipDuplicates;
     // Duplicates are detected on the interpolation path only.
@@ -162,22 +173,45 @@
       saveSettings({ ...currentSettings(), [field]: Number(input.value) })));
   }
 
+  /**
+   * Dimmed blocks only drop pointer events in CSS; inert also takes them out
+   * of keyboard focus, so a parked switch can't be flipped with Tab + Space.
+   */
+  function setParked(elements, parked) {
+    for (const element of elements) element.inert = parked;
+  }
+
   function renderStore() {
     const config = resolveConfig(state.store, state.siteKey);
     ui.globalEnabled.checked = config.globalEnabled;
     ui.app.classList.toggle('global-off', !config.globalEnabled);
+    setParked(ui.globalParked, !config.globalEnabled);
     ui.siteEnabled.checked = config.siteEnabled;
     ui.siteAutoStart.checked = config.autoStart;
     ui.siteOwnSettings.checked = config.ownSettings;
     ui.siteCard.classList.toggle('site-off', !config.siteEnabled);
+    setParked(ui.needsSite, !config.siteEnabled);
     ui.pick.disabled = !state.siteKey || !config.enabled;
     renderSettings(config);
+    renderStatus();
   }
 
   function setStatus(stateName, title, detail) {
     ui.statusCard.dataset.state = stateName;
     ui.statusTitle.textContent = title;
     ui.statusDetail.textContent = detail;
+  }
+
+  /** No session yet: explain why "Выбрать плеер" is unavailable, if it is. */
+  function renderIdleStatus() {
+    const config = resolveConfig(state.store, state.siteKey);
+    if (!config.globalEnabled) {
+      setStatus('idle', 'Расширение выключено', 'Включите главный выключатель вверху');
+    } else if (!config.siteEnabled) {
+      setStatus('idle', 'Выключено на этом сайте', 'Включите «Включено на этом сайте» ниже');
+    } else {
+      setStatus('idle', 'Видео не выбрано', 'Выберите плеер на странице');
+    }
   }
 
   function renderStatus() {
@@ -189,7 +223,7 @@
       return;
     }
     if (!s) {
-      setStatus('idle', 'Видео не выбрано', 'Выберите плеер на странице');
+      renderIdleStatus();
       return;
     }
     if (s.gpu) ui.gpu.textContent = `Видеокарта: ${s.gpu}`;
@@ -324,6 +358,7 @@
     state.store = await loadStore();
     ui.siteName.textContent = state.siteKey ?? 'Неподдерживаемая страница';
     ui.siteCard.classList.toggle('unavailable', !state.siteKey);
+    setParked(ui.siteCard.querySelectorAll('.row'), !state.siteKey);
     renderStore();
     bindEvents();
     await refreshStatus();
