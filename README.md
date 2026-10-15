@@ -1,3 +1,9 @@
+<span align="center">
+
+[![Chrome Version](https://img.shields.io/chrome-web-store/v/pdplibffbjbedgpieedljncokihehgjk?label=Chrome)](https://chromewebstore.google.com/detail/pdplibffbjbedgpieedljncokihehgjk)
+
+</span>
+
 # FSRCNNX — улучшение видео
 
 Расширение для Chrome, которое в реальном времени улучшает любое HTML5-видео
