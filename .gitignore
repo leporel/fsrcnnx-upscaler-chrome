@@ -3,3 +3,6 @@ tools/parity/out/
 tools/parity/_probe/
 tools/parity/shaders.gen.js
 __pycache__/
+
+# Local planning notes
+.prompts/

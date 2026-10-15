@@ -69,8 +69,9 @@
 
 ## Лицензии
 
-- Код расширения — собственный.
-- Шейдеры FSRCNNX — LGPL-3.0 (заголовки в `extension/shaders`).
+- Код расширения — MIT (`LICENSE`).
+- Шейдеры FSRCNNX — LGPL-3.0 (`extension/shaders/COPYING.LESSER`,
+  `extension/shaders/COPYING`).
 - Код Framegen — MIT (`extension/vendor/framegen/LICENSE`).
 - **Веса нейросети Framegen — только для личного некоммерческого
   использования** (`extension/vendor/framegen/WEIGHTS_LICENSE.md`).
