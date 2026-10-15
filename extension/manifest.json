@@ -2,7 +2,8 @@
   "manifest_version": 3,
   "name": "FSRCNNX — улучшение видео",
   "version": "1.0.0",
-  "description": "Увеличение видео нейросетью FSRCNNX и удвоение кадров в реальном времени для любого HTML5-плеера. Работает на видеокарте через WebGPU.",
+  "description": "Увеличение видео нейросетью FSRCNNX и удвоение кадров ×2 в реальном времени для любого HTML5-видео. Работает через WebGPU.",
+  "homepage_url": "https://github.com/leporel/fsrcnnx-upscaler-chrome",
   "minimum_chrome_version": "130",
   "web_accessible_resources": [
     {

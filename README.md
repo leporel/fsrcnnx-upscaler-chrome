@@ -127,3 +127,8 @@ python tools/parity/run_parity.py --page "framegen?scale=4&shift=8"   # пров
 Страницы тестов работают только по http (скрипт сам поднимает сервер). Чтобы
 открыть их вручную, выполните `python -m http.server` в корне репозитория и
 зайдите на `http://127.0.0.1:8000/tools/parity/webgpu.html`.
+
+### Публикация в Chrome Web Store
+
+`python tools/package.py` собирает `dist/fsrcnnx-upscaler-chrome-<версия>.zip`
+и проверяет лимиты манифеста.

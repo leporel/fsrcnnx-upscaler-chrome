@@ -6,3 +6,6 @@ __pycache__/
 
 # Local planning notes
 .prompts/
+
+# Chrome Web Store packages (tools/package.py)
+dist/
