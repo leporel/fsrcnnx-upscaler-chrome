@@ -24,6 +24,11 @@
   let autoPollTimer = 0;
   /** Videos that failed or were detached by the user: auto-start leaves them alone. */
   const skippedVideos = new WeakSet();
+  /**
+   * The tab's session lost its video (next episode, rebuilt player), so the
+   * next main video is picked up like with auto-start, even if that is off.
+   */
+  let following = false;
 
   /** Set once this copy has lost its extension (reloaded or updated). */
   let orphaned = false;
@@ -52,12 +57,14 @@
     console.error(`[FSRCNNX] ${context}`, err);
   };
 
-  function notifyState() {
+  /** @param {boolean} [follow] - after a session ended: keep following the site */
+  function notifyState(follow = false) {
     if (checkOrphaned()) return;
     sendToWorker({
       type: MESSAGES.SESSION_STATE,
       active: Boolean(session),
       enabled: Boolean(session?.enabled),
+      follow,
     }).catch(logError('state update failed'));
   }
 
@@ -69,7 +76,9 @@
     if (ended.failed) skippedVideos.add(ended.video);
     if (session !== ended) return;
     session = null;
-    notifyState();
+    following = ended.videoLost;
+    notifyState(following);
+    if (following) startAutoWatch();
   }
 
   /**
@@ -117,7 +126,10 @@
     autoPending = true;
     try {
       const config = await currentConfig();
-      if (!config.enabled || !config.autoStart) return;
+      if (!config.enabled || !(config.autoStart || following)) {
+        stopAutoWatch();
+        return;
+      }
       const target = candidate && isAutoCandidate(candidate) && !skippedVideos.has(candidate)
         ? candidate
         : findMainPlayingVideo(skippedVideos);
@@ -158,7 +170,7 @@
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !STORE_KEYS.some((key) => key in changes)) return;
     currentConfig().then((config) => {
-      if (!config.autoStart || !config.enabled) stopAutoWatch();
+      if (!config.enabled || !(config.autoStart || following)) stopAutoWatch();
       if (session) {
         session.applyConfig(config);
         notifyState();
@@ -176,6 +188,7 @@
         stopPicker(message.winner);
         return false;
       case MESSAGES.AUTO_START:
+        if (message.follow === true) following = true;
         startAutoWatch();
         return false;
       case MESSAGES.SESSION_GET:

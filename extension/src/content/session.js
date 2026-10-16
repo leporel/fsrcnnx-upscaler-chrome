@@ -7,6 +7,7 @@
     sendToWorker, randomToken, errorMessage, formatSize, formatFrameGen,
   } = FSRX;
   const { parseHookShader } = FSRX.mpvHook;
+  const { visibleArea } = FSRX.videoFinder;
 
   // Automatic HUD pop-ups (start, preset or state changes) stay short.
   const HUD_DURATION_MS = 2000;
@@ -65,6 +66,8 @@
       this.loadGeneration = 0;
       this.error = null;
       this.failed = false;
+      // Set when the player dropped or hid the video (next episode, player rebuild).
+      this.videoLost = false;
       this.destroyed = false;
       this.hasPicture = true;
       this.lastResult = null;
@@ -135,10 +138,25 @@
       clearInterval(this.watchdog);
     }
 
+    /**
+     * Players switching episodes either remove the old <video> or keep it
+     * hidden and paused while a new one plays.
+     */
+    get videoGone() {
+      const { video } = this;
+      return !video.isConnected || (video.paused && visibleArea(video) === 0);
+    }
+
     checkHealth() {
       // Extension reloaded or updated: this copy is orphaned and a fresh one
       // may attach its own overlay, so step aside.
-      if (!this.video.isConnected || !chrome.runtime?.id) {
+      if (!chrome.runtime?.id) {
+        this.destroy();
+        return;
+      }
+      if (this.videoGone) {
+        // A failed session is not followed: the next video would fail the same way.
+        this.videoLost = !this.failed;
         this.destroy();
         return;
       }

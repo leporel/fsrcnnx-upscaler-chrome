@@ -73,34 +73,54 @@ async function getShader(modelId) {
 }
 
 // ---- per-tab session registry ----------------------------------------------
-// Which frames of a tab own a session ({[frameId]: enabled}). Lives in
-// storage.session because the worker may be terminated between events, and
-// updates are serialized so concurrent claims can't both win.
+// Per tab: which frames own a session ({[frameId]: enabled}) and which site the
+// tab keeps "following" (the session's video was replaced, e.g. by the next
+// episode, so the next main video is picked up even without auto-start).
+// Lives in storage.session because the worker may be terminated between
+// events, and updates are serialized so concurrent claims can't both win.
 
 const REGISTRY_KEY = 'tabSessions';
 let registryQueue = Promise.resolve();
 
 /**
- * Runs `mutate(frames)` on one tab's entry under the registry lock.
+ * @typedef {{frames: Record<string, boolean>, follow: string | null}} TabEntry
+ */
+
+async function readRegistry() {
+  const { [REGISTRY_KEY]: registry = {} } = await chrome.storage.session.get(REGISTRY_KEY);
+  return registry;
+}
+
+/** @returns {TabEntry} */
+function copyEntry(stored) {
+  return { frames: { ...(stored?.frames ?? {}) }, follow: stored?.follow ?? null };
+}
+
+/**
+ * Runs `mutate(entry)` on one tab's entry under the registry lock.
  * @template T
  * @param {number} tabId
- * @param {(frames: Record<string, boolean>) => T} mutate
+ * @param {(entry: TabEntry) => T} mutate
  * @returns {Promise<T>}
  */
-function updateTabFrames(tabId, mutate) {
+function updateTab(tabId, mutate) {
   const run = async () => {
-    const { [REGISTRY_KEY]: registry = {} } = await chrome.storage.session.get(REGISTRY_KEY);
-    const frames = { ...(registry[tabId] ?? {}) };
-    const result = mutate(frames);
-    if (Object.keys(frames).length > 0) registry[tabId] = frames;
+    const registry = await readRegistry();
+    const entry = copyEntry(registry[tabId]);
+    const result = mutate(entry);
+    if (Object.keys(entry.frames).length > 0 || entry.follow) registry[tabId] = entry;
     else delete registry[tabId];
     await chrome.storage.session.set({ [REGISTRY_KEY]: registry });
-    await renderBadge(tabId, frames);
+    await renderBadge(tabId, entry.frames);
     return result;
   };
   const next = registryQueue.then(run, run);
   registryQueue = next.catch(() => { /* keep the queue alive; the caller gets the error */ });
   return next;
+}
+
+async function readFollow(tabId) {
+  return (await readRegistry())[tabId]?.follow ?? null;
 }
 
 async function renderBadge(tabId, frames) {
@@ -115,23 +135,63 @@ async function renderBadge(tabId, frames) {
   }
 }
 
-function clearTab(tabId) {
-  return updateTabFrames(tabId, (frames) => Object.keys(frames).forEach((id) => delete frames[id]));
-}
-
-function setFrameState(tabId, frameId, active, enabled) {
-  return updateTabFrames(tabId, (frames) => {
-    if (active) frames[frameId] = enabled;
-    else delete frames[frameId];
+/** Top-level navigation: frames are gone, following survives only on the same site. */
+function resetTab(tabId, siteKey) {
+  return updateTab(tabId, (entry) => {
+    entry.frames = {};
+    if (entry.follow !== siteKey) entry.follow = null;
   });
 }
 
-/** Grants auto-start to a frame only if no other frame of the tab has a session. */
-function claimAutoSession(tabId, frameId, enabled) {
-  return updateTabFrames(tabId, (frames) => {
-    const othersActive = Object.keys(frames).some((id) => Number(id) !== frameId);
+function forgetTab(tabId) {
+  return updateTab(tabId, (entry) => {
+    entry.frames = {};
+    entry.follow = null;
+  });
+}
+
+function removeFrame(tabId, frameId) {
+  return updateTab(tabId, (entry) => {
+    delete entry.frames[frameId];
+  });
+}
+
+/**
+ * Session state reported by a frame. An active session makes the tab follow
+ * its site; a session closed on purpose (detached, failed) stops that unless
+ * another frame still has one.
+ */
+function setFrameState(tabId, frameId, siteKey, { active, enabled, follow }) {
+  return updateTab(tabId, (entry) => {
+    if (active) {
+      entry.frames[frameId] = enabled;
+      entry.follow = siteKey;
+      return;
+    }
+    delete entry.frames[frameId];
+    if (!follow && Object.keys(entry.frames).length === 0) entry.follow = null;
+  });
+}
+
+/**
+ * Frames removed from the page (an iframe player replaced with a new one)
+ * send no navigation event, so their registry entries are checked here.
+ */
+async function liveFrameIds(tabId) {
+  const frames = await chrome.webNavigation.getAllFrames({ tabId });
+  return new Set((frames ?? []).map((frame) => String(frame.frameId)));
+}
+
+/** Grants auto-start to a frame only if no other live frame of the tab has a session. */
+async function claimAutoSession(tabId, frameId, enabled) {
+  const live = await liveFrameIds(tabId);
+  return updateTab(tabId, (entry) => {
+    for (const id of Object.keys(entry.frames)) {
+      if (!live.has(id)) delete entry.frames[id];
+    }
+    const othersActive = Object.keys(entry.frames).some((id) => Number(id) !== frameId);
     if (othersActive) return { granted: false };
-    frames[frameId] = enabled;
+    entry.frames[frameId] = enabled;
     return { granted: true };
   });
 }
@@ -148,16 +208,17 @@ async function startPicker(tabId) {
 
 /**
  * Injects into the given frames (or all) of a tab and arms auto-start there,
- * if the tab's site has auto-start enabled.
+ * if the tab's site has auto-start enabled or the tab follows this site.
  */
 async function autoStart(tabId, frameIds) {
   const tab = await chrome.tabs.get(tabId);
   const siteKey = siteKeyFromUrl(tab.url);
   if (!siteKey) return;
   const config = resolveConfig(await loadStore(), siteKey);
-  if (!config.enabled || !config.autoStart) return;
+  const follow = (await readFollow(tabId)) === siteKey;
+  if (!config.enabled || !(config.autoStart || follow)) return;
   await ensureInjected(tabId, frameIds);
-  const message = { type: MESSAGES.AUTO_START, siteKey };
+  const message = { type: MESSAGES.AUTO_START, siteKey, follow };
   if (!frameIds) {
     await broadcast(tabId, message);
     return;
@@ -181,7 +242,11 @@ const contentHandlers = new Map([
     broadcast(sender.tab.id, { type: MESSAGES.PICKER_STOP, winner: null })],
   [MESSAGES.SHADER_GET, (message) => getShader(message.modelId).then((source) => ({ source }))],
   [MESSAGES.SESSION_STATE, (message, sender) =>
-    setFrameState(sender.tab.id, sender.frameId, Boolean(message.active), Boolean(message.enabled))],
+    setFrameState(sender.tab.id, sender.frameId, siteKeyFromUrl(sender.tab.url), {
+      active: Boolean(message.active),
+      enabled: Boolean(message.enabled),
+      follow: Boolean(message.follow),
+    })],
   [MESSAGES.AUTO_CLAIM, (message, sender) =>
     claimAutoSession(sender.tab.id, sender.frameId, Boolean(message.enabled))],
 ]);
@@ -214,13 +279,13 @@ function reportBackgroundError(context) {
 }
 
 // A navigated frame loses its session (the content script dies with it).
-chrome.webNavigation.onCommitted.addListener(({ tabId, frameId }) => {
-  const reset = frameId === 0 ? clearTab(tabId) : setFrameState(tabId, frameId, false, false);
+chrome.webNavigation.onCommitted.addListener(({ tabId, frameId, url }) => {
+  const reset = frameId === 0 ? resetTab(tabId, siteKeyFromUrl(url)) : removeFrame(tabId, frameId);
   reset.catch(reportBackgroundError('session reset'));
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  clearTab(tabId).catch(reportBackgroundError('tab cleanup'));
+  forgetTab(tabId).catch(reportBackgroundError('tab cleanup'));
 });
 
 // Covers the top document and players inside (possibly late-loaded) iframes.

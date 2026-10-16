@@ -104,5 +104,5 @@
     return isVideo(video) && visibleArea(video) >= MIN_AUTO_AREA;
   }
 
-  FSRX.videoFinder = { findVideoAt, findMainPlayingVideo, isAutoCandidate };
+  FSRX.videoFinder = { findVideoAt, findMainPlayingVideo, isAutoCandidate, visibleArea };
 })();
